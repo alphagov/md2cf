@@ -256,3 +256,8 @@ class MinimalConfluence:
         if additional_expansions is not None:
             params = {"expand": ",".join(additional_expansions)}
         return self._get(f"space/{space}", params=params)
+
+    def update_parent(self, page):
+        parent_id = self.get_parent_id(page)
+        position = "append"
+        self._put(f"content/{page.id}/move/{position}/{parent_id}")

@@ -97,6 +97,8 @@ def upsert_page(
         if not only_changed or page_needs_updating(
             page, existing_page, replace_all_labels
         ):
+            should_fix_parent = page_needs_moving(page, existing_page)
+
             existing_page = confluence.update_page(
                 page=existing_page,
                 body=page.body,
@@ -105,6 +107,15 @@ def upsert_page(
                 labels=page.labels if replace_all_labels else None,
                 minor_edit=minor_edit,
             )
+            # If a page moves, there is a Confluence bug such that the move has no
+            # effect without explicitly updating the page's parent.
+            #
+            # We update the parent only if it did move, however this means should it
+            # already appear in the "wrong" place (as the API does not necessarily
+            # report the actual location shown to users) it will stay in the wrong
+            # place.
+            if should_fix_parent:
+                confluence.update_parent(existing_page)
             action = UpsertAction.UPDATED
         else:
             action = UpsertAction.SKIPPED
@@ -130,7 +141,7 @@ def labels_need_updating(page, existing_page):
         return True
 
 
-def page_needs_updating(page, existing_page, replace_all_labels):
+def page_needs_moving(page, existing_page):
     if page.parent_id is None and existing_page.ancestors:
         # page wants to become a top level page and was not one before
         # (top level pages only have one ancestor: the space's home page)
@@ -141,6 +152,13 @@ def page_needs_updating(page, existing_page, replace_all_labels):
         or page.parent_id != existing_page.ancestors[-1].id
     ):
         # page wants to change parent
+        return True
+
+    return False
+
+
+def page_needs_updating(page, existing_page, replace_all_labels):
+    if page_needs_moving(page, existing_page):
         return True
 
     if replace_all_labels and labels_need_updating(page, existing_page):

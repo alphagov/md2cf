@@ -352,6 +352,25 @@ def test_update_page_with_message(confluence, requests_mock):
     assert page == updated_page
 
 
+def test_update_parent(confluence, requests_mock):
+    test_page_id = 12345
+    test_parent_id = 56789
+
+    test_page_object = bunchify(
+        {
+            "id": test_page_id,
+            "ancestors": [{"id": test_parent_id}],
+        },
+    )
+
+    requests_mock.put(
+        TEST_HOST + f"content/{test_page_id}/move/append/{test_parent_id}",
+        json={},
+    )
+
+    confluence.update_parent(test_page_object)
+
+
 def test_create_attachment(mocker, confluence, requests_mock):
     test_page = bunchify({"id": 123})
     file_contents = b"12345"

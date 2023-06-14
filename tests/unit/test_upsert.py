@@ -158,7 +158,7 @@ def test_upsert_page_only_changed_new_page(mocker):
 
 def test_upsert_page_only_changed_modified_page(mocker):
     """We only want to upload pages that have changed, and the existing page
-    has been changed"""
+    has been changed and moved"""
 
     confluence = mocker.Mock(spec=Confluence)
     original_message_hash = "[vdeadbeefc15d32fe2d36c270887df9479c25c640]"
@@ -192,6 +192,10 @@ def test_upsert_page_only_changed_modified_page(mocker):
     assert upsert_result.response == mocker.sentinel.updated_page
     assert upsert_result.action == upsert_result.action.UPDATED
 
+    confluence.update_parent.assert_called_once_with(
+        mocker.sentinel.updated_page,
+    )
+
 
 def test_upsert_page_only_changed_no_changes(mocker):
     """We only want to upload pages that have changed, but the existing page
@@ -219,9 +223,51 @@ def test_upsert_page_only_changed_no_changes(mocker):
     )
 
     confluence.update_page.assert_not_called()
+    confluence.update_parent.assert_not_called()
 
     assert upsert_result.response == existing_page_mock
     assert upsert_result.action == upsert_result.action.SKIPPED
+
+
+def test_upsert_page_only_changed_page_moved(mocker):
+    """We only want to upload pages that have changed, the existing page
+    changed but was not moved"""
+
+    original_message_hash = "[vdeadbeefc15d32fe2d36c270887df9479c25c640]"
+    existing_page_mock = mocker.Mock()
+    existing_page_mock.version.message = original_message_hash
+
+    confluence = mocker.Mock(spec=Confluence)
+    message_hash = "[v6e71b3cac15d32fe2d36c270887df9479c25c640]"
+    ancestor_mock = mocker.Mock()
+    ancestor_mock.id = mocker.sentinel.parent_id
+    existing_page_mock.ancestors = [ancestor_mock]
+    confluence.get_page.side_effect = [existing_page_mock, None]
+    confluence.update_page.return_value = mocker.sentinel.updated_page
+
+    page = Page(
+        space=mocker.sentinel.space,
+        title=mocker.sentinel.title,
+        body="hello there",
+        parent_id=mocker.sentinel.parent_id,
+    )
+
+    upsert_result = md2cf.upsert.upsert_page(
+        confluence=confluence, page=page, message="", only_changed=True
+    )
+
+    confluence.update_page.assert_called_once_with(
+        page=existing_page_mock,
+        body=page.body,
+        minor_edit=False,
+        parent_id=mocker.sentinel.parent_id,
+        update_message=message_hash,
+        labels=None,
+    )
+    confluence.update_parent.assert_not_called()
+
+    assert upsert_result.response == mocker.sentinel.updated_page
+    assert upsert_result.action == upsert_result.action.UPDATED
 
 
 def test_page_needs_updating_page_not_changed(mocker):
